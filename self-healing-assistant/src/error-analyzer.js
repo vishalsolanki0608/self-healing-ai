@@ -1,4 +1,5 @@
 const fs = require("fs");
+const path = require("path");
 
 class ErrorAnalyzer {
   analyze(errorLog) {
@@ -8,10 +9,12 @@ class ErrorAnalyzer {
 
     const stackLines = errorLog.stack.split("\n");
 
-    const sourceLocation = this.findSourceLocation(stackLines);
+    const sourceLocation = this.findApplicationSourceLocation(stackLines);
 
     if (!sourceLocation) {
-      throw new Error("Could not identify source file from stack trace");
+      throw new Error(
+        "Could not identify application source file from stack trace",
+      );
     }
 
     const sourceCode = this.readSourceFile(
@@ -41,30 +44,52 @@ class ErrorAnalyzer {
     };
   }
 
-  findSourceLocation(stackLines) {
+  findApplicationSourceLocation(stackLines) {
+    const applicationFrames = [];
+
     for (const line of stackLines) {
-      const match = line.match(/\((.*):(\d+):(\d+)\)/);
+      const match = line.match(/^\s*at\s+(?:.*\s)?\(?(.+):(\d+):(\d+)\)?\s*$/);
 
       if (!match) {
         continue;
       }
 
-      const file = match[1];
+      const filePath = path.resolve(match[1].trim());
+
       const lineNumber = Number(match[2]);
+
       const columnNumber = Number(match[3]);
 
-      if (!fs.existsSync(file)) {
+      // Ignore dependencies.
+      if (filePath.includes(`${path.sep}node_modules${path.sep}`)) {
         continue;
       }
 
-      return {
-        file,
+      // Only allow demo-backend application source.
+      if (
+        !filePath.includes(`${path.sep}demo-backend${path.sep}src${path.sep}`)
+      ) {
+        continue;
+      }
+
+      if (!fs.existsSync(filePath)) {
+        continue;
+      }
+
+      applicationFrames.push({
+        file: filePath,
         line: lineNumber,
         column: columnNumber,
-      };
+      });
     }
 
-    return null;
+    if (applicationFrames.length === 0) {
+      return null;
+    }
+
+    // The first application frame is normally
+    // the actual location where the error occurred.
+    return applicationFrames[0];
   }
 
   readSourceFile(filePath, errorLine) {
