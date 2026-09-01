@@ -1,10 +1,13 @@
 const fs = require("fs");
+const path = require("path");
 
 class CodePatcher {
   applyPatch(aiFix) {
     this.validatePatch(aiFix);
 
-    const filePath = aiFix.file;
+    const filePath = path.resolve(aiFix.file);
+
+    this.validateTargetPath(filePath);
 
     if (!fs.existsSync(filePath)) {
       throw new Error(`Target file does not exist: ${filePath}`);
@@ -37,6 +40,29 @@ class CodePatcher {
       oldCode: aiFix.oldCode,
       newCode: aiFix.newCode,
     };
+  }
+
+  validateTargetPath(filePath) {
+    const allowedSourceDirectory = path.resolve(
+      __dirname,
+      "../../demo-backend/src",
+    );
+
+    const relativePath = path.relative(allowedSourceDirectory, filePath);
+
+    // File is outside demo-backend/src
+    if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+      throw new Error(
+        `Unsafe patch rejected. AI can only modify files inside demo-backend/src: ${filePath}`,
+      );
+    }
+
+    // Extra protection against dependencies
+    if (filePath.includes(`${path.sep}node_modules${path.sep}`)) {
+      throw new Error(
+        `Unsafe patch rejected. node_modules cannot be modified: ${filePath}`,
+      );
+    }
   }
 
   validatePatch(aiFix) {
@@ -78,17 +104,18 @@ class CodePatcher {
 
   countOccurrences(text, searchText) {
     let count = 0;
-    let position = 0;
+    let countPosition = 0;
 
     while (true) {
-      const index = text.indexOf(searchText, position);
+      const index = text.indexOf(searchText, countPosition);
 
       if (index === -1) {
         break;
       }
 
       count++;
-      position = index + searchText.length;
+
+      countPosition = index + searchText.length;
     }
 
     return count;
