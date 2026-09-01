@@ -18,7 +18,7 @@ app.get("/users/:id", (req, res) => {
     const user = null;
 
     // INTENTIONAL BUG
-    const name = user?.name;
+    const name = user.name;
 
     res.json({
       id: req.params.id,
